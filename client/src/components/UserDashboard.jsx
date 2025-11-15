@@ -1,205 +1,108 @@
-// UserDashboard.jsx
-import React, { useState, useRef, useEffect } from "react";
+// client/src/components/UserDashboard.jsx
+import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
-import "../App.css";
+const API = "http://localhost:5000";
 
-const API_BASE = "http://localhost:5000";
-
-export default function UserDashboard() {
+export default function UserDashboard(){
   const [recording, setRecording] = useState(false);
-  const [lastBlob, setLastBlob] = useState(null);
-  const [audioURL, setAudioURL] = useState("");
+  const [blobUrl, setBlobUrl] = useState(null);
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const mediaRecorderRef = useRef(null);
+  const mediaRef = useRef(null);
   const chunksRef = useRef([]);
-  const audioRef = useRef(null);
 
-  useEffect(() => {
+  useEffect(()=> {
     return () => {
-      // cleanup object url
-      if (audioURL) URL.revokeObjectURL(audioURL);
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [audioURL]);
+  }, [blobUrl]);
 
-  const startRecording = async () => {
+  const start = async () => {
     setMessage("");
     chunksRef.current = [];
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      const mr = new MediaRecorder(stream);
+      mediaRef.current = mr;
+      mr.ondataavailable = (e) => { if(e.data && e.data.size) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const b = new Blob(chunksRef.current, { type: "audio/wav" });
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        setBlobUrl(URL.createObjectURL(b));
       };
-
-      recorder.onstop = () => {
-        // create a webm blob (widely supported by modern browsers)
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        setLastBlob(blob);
-
-        // create compatible URL for playback
-        const url = URL.createObjectURL(blob);
-        setAudioURL(url);
-
-        // attempt to resume audio context / play on user gesture if desired
-      };
-
-      recorder.start();
+      mr.start();
       setRecording(true);
-    } catch (err) {
-      console.error("Mic access error:", err);
-      setMessage("Please allow microphone access");
+    } catch (e) {
+      console.error("Mic err", e);
+      setMessage("Please allow microphone");
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-      try {
-        mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
-      } catch (e) {}
+  const stop = () => {
+    if (mediaRef.current && mediaRef.current.state !== "inactive") {
+      mediaRef.current.stop();
+      mediaRef.current.stream.getTracks().forEach(t=>t.stop());
     }
     setRecording(false);
   };
 
-  const playAudio = async () => {
-    if (!audioURL) {
-      setMessage("No audio to play");
-      return;
-    }
-    try {
-      // use audio element to play (ensures proper decoding)
-      const el = audioRef.current;
-      el.volume = 1.0;
-      await el.play();
-    } catch (err) {
-      console.error("Playback error:", err);
-      setMessage("Playback failed (browser may block auto-play)");
-    }
+  const play = () => {
+    if (!blobUrl) return setMessage("No recording");
+    const a = new Audio(blobUrl);
+    a.play();
   };
 
   const registerVoice = async () => {
-    if (!lastBlob) return setMessage("Record a voice sample first");
-
-    setLoading(true);
     setMessage("");
+    if (!chunksRef.current.length) return setMessage("Record first");
+    const blob = new Blob(chunksRef.current, { type: "audio/wav" });
+    const fd = new FormData();
+    const username = localStorage.getItem("va_user") || "guest";
+    fd.append("name", username);
+    fd.append("voice", blob, "voice.wav");
     try {
-      const form = new FormData();
-      form.append("name", localStorage.getItem("va_user") || "guest");
-      form.append("voice", lastBlob, "voice.webm");
-
-      const token = localStorage.getItem("va_token") || "";
-
-      const res = await axios.post(`${API_BASE}/api/register`, form, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-
-      setMessage(res.data.message || "Registered");
-    } catch (err) {
-      console.error("Register error:", err);
-      setMessage("Registration failed");
-    } finally {
-      setLoading(false);
+      const res = await axios.post(`${API}/api/register`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      setMessage("Registered successfully");
+    } catch (e) {
+      console.error("Register error", e);
+      setMessage(e?.response?.data?.error || "Registration failed");
     }
   };
 
   const verifyVoice = async () => {
-    if (!lastBlob) return setMessage("Record a voice sample first");
-
-    setLoading(true);
     setMessage("");
-
+    if (!chunksRef.current.length) return setMessage("Record first");
+    const blob = new Blob(chunksRef.current, { type: "audio/wav" });
+    const fd = new FormData();
+    fd.append("voice", blob, "voice.wav");
     try {
-      const form = new FormData();
-      form.append("voice", lastBlob, "voice.webm");
-      const token = localStorage.getItem("va_token") || "";
-
-      // call your backend verify endpoint
-      const res = await axios.post(`${API_BASE}/api/verify`, form, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-
-      const data = res.data;
-      if (data.verified) {
-        setMessage(`✅ Verified as ${data.matchedUser || data.user || "user"} (conf ${Number(data.confidence || data.score || 0).toFixed(2)})`);
-      } else {
-        setMessage("❌ Not matched");
-      }
-    } catch (err) {
-      console.error("Verify error:", err);
-      setMessage(err?.response?.data?.error || "Verification failed");
-    } finally {
-      setLoading(false);
+      const res = await axios.post(`${API}/api/verify`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      const d = res.data;
+      if (d.verified) setMessage(`✅ Matched: ${d.matchedUser} (score ${Number(d.confidence).toFixed(3)})`);
+      else setMessage("❌ Not matched");
+    } catch (e) {
+      console.error("Verify error:", e);
+      setMessage(e?.response?.data?.error || "Verification failed");
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem("va_token");
-    localStorage.removeItem("va_user");
-    window.location.href = "/";
-  };
-
   return (
-    <div className="container">
-      <div className="topbar card" style={{ marginBottom: 18 }}>
-        <div style={{ fontWeight: 600, color: "var(--primary)" }}>🎙 VoiceAuth</div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <div style={{ color: "var(--muted)" }}>{localStorage.getItem("va_user") || "Guest"}</div>
-          <button className="btn ghost" onClick={logout}>Logout</button>
-        </div>
+    <div style={{padding:24}}>
+      <h2>Record voice</h2>
+      <div style={{marginBottom:12}}>
+        {!recording && <button onClick={start}>🎤 Start</button>}
+        {recording && <button onClick={stop}>⛔ Stop</button>}
+        <button onClick={play} style={{marginLeft:8}}>▶ Play</button>
       </div>
 
-      <div className="dashboard-grid">
-        <div className="card">
-          <h3 style={{ margin: 0, marginBottom: 10 }}>Record & Verify</h3>
-          <div style={{ color: "var(--muted)", fontSize: 14 }}>Click to record a short voice sample (2–4s)</div>
+      <div style={{marginTop:12}}>
+        <button onClick={registerVoice}>Register</button>
+        <button onClick={verifyVoice} style={{marginLeft:8}}>Verify</button>
+      </div>
 
-          <div className="rec-controls" style={{ marginTop: 16 }}>
-            {!recording ? (
-              <div className="mic" onClick={startRecording} title="Start recording">🎤</div>
-            ) : (
-              <div className="mic" onClick={stopRecording} style={{ background: "linear-gradient(135deg,#ff7b92,#ff6b88)" }} title="Stop recording">⏹</div>
-            )}
+      <div style={{marginTop:16, color: message?.startsWith("✅") ? "green" : "tomato"}}>{message}</div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn primary" onClick={registerVoice} disabled={loading || !lastBlob}>Register</button>
-                <button className="btn" onClick={verifyVoice} disabled={loading || !lastBlob}>Verify</button>
-                <button className="btn" onClick={playAudio} disabled={!audioURL}>Play</button>
-              </div>
-              <div style={{ fontSize: 13, color: "var(--muted)" }}>Tip: record in a quiet place and use similar phrase for register & verify.</div>
-            </div>
-          </div>
-
-          <audio ref={audioRef} src={audioURL} style={{ marginTop: 14 }} controls />
-
-          {message && (
-            <div className={`msg ${message.startsWith("✅") ? "success" : message.startsWith("❌") ? "error" : ""}`} style={{ marginTop: 14 }}>
-              {message}
-            </div>
-          )}
-        </div>
-
-        <aside className="card">
-          <h4 style={{ marginTop: 0 }}>Quick Info</h4>
-          <div style={{ color: "var(--muted)", fontSize: 14 }}>
-            Registered users: <strong>{/* this is static placeholder; fetch via API */} — </strong>
-          </div>
-
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 13, color: "var(--muted)" }}>Status</div>
-            <div style={{ marginTop: 8 }}>
-              <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 4, background: "var(--success)" }}></div>
-                <div style={{ color: "var(--muted)" }}>Service available</div>
-              </div>
-            </div>
-          </div>
-        </aside>
+      <div style={{marginTop:20}}>
+        <small>Signed in as: {localStorage.getItem("va_user") || "Guest"}</small>
       </div>
     </div>
   );

@@ -1,62 +1,55 @@
 // server/routes/register.js
 import express from "express";
 import multer from "multer";
-import fs from "fs";
-import path from "path";
 import axios from "axios";
 import FormData from "form-data";
-import { v4 as uuidv4 } from "uuid";
+import dotenv from "dotenv";
 import User from "../models/User.js";
-import authMiddleware from "../middleware/auth.js";
 
+dotenv.config();
 const router = express.Router();
-const upload = multer(); // memory storage (we'll stream to AI service)
-const AI_URL = process.env.AI_SERVICE_URL || "http://127.0.0.1:8000/analyze-voice";
+const upload = multer({ storage: multer.memoryStorage() });
+const AI_URL = process.env.AI_SERVICE_URL;
+const TARGET_LEN = 28;
 
-// Register voice sample (authenticated or guest if you prefer)
-router.post("/register", upload.single("voice"), authMiddleware, async (req, res) => {
+router.post("/", upload.single("voice"), async (req, res) => {
   try {
-    // require a user
-    const username = req.body.name || req.user?.username;
-    if (!username) return res.status(400).json({ error: "No username provided" });
+    const name = req.body.name || req.body.username || "guest";
+    if (!req.file) return res.status(400).json({ error: "Missing file" });
 
-    if (!req.file) return res.status(400).json({ error: "No voice file uploaded" });
-
-    // Send file bytes to AI microservice
+    // Send to AI microservice
     const form = new FormData();
-    form.append("file", req.file.buffer, { filename: req.file.originalname || "voice.webm" });
+    form.append("file", req.file.buffer, { filename: req.file.originalname || "voice.wav" });
 
     const aiRes = await axios.post(AI_URL, form, { headers: form.getHeaders(), timeout: 30000 });
-    if (aiRes.status !== 200 || aiRes.data.error) {
+
+    if (aiRes.status !== 200 || !aiRes.data?.features) {
       console.error("AI service error:", aiRes.data);
-      return res.status(500).json({ error: "Feature extraction failed" });
+      return res.status(500).json({ error: "AI service error", detail: aiRes.data });
     }
 
-    const features = aiRes.data.features || aiRes.data.feature_vector || aiRes.data; // flexible
+    let features = aiRes.data.features;
+    if (!Array.isArray(features)) return res.status(500).json({ error: "Invalid features from AI" });
 
-    // store user & recording
-    let user = await User.findOne({ username });
+    // normalize/pad/truncate to TARGET_LEN
+    if (features.length < TARGET_LEN) {
+      features = features.concat(Array(TARGET_LEN - features.length).fill(0));
+    } else if (features.length > TARGET_LEN) {
+      features = features.slice(0, TARGET_LEN);
+    }
+
+    // Upsert user and append recording
+    let user = await User.findOne({ username: name });
     if (!user) {
-      user = new User({ username, password: "placeholder" }); // placeholder means guest; better to require auth
-      await user.save();
+      user = new User({ username: name, recordings: [] });
     }
-
-    const fileId = uuidv4();
-    // For simplicity we won't store actual wav file on disk here; cleaned_url can be URL to file storage if you add it.
-    const rec = {
-      file_id: fileId,
-      cleaned_url: aiRes.data.cleaned_url || null,
-      created_at: new Date(),
-      features: Array.isArray(features) ? features : []
-    };
-
-    user.recordings.push(rec);
+    user.recordings.push({ features });
     await user.save();
 
-    res.json({ message: "Registered", recording: rec });
+    return res.json({ ok: true, message: "Registered", features_length: features.length });
   } catch (err) {
-    console.error("REGISTER - Error:", err?.response?.data || err.message || err);
-    res.status(500).json({ error: "Registration failed" });
+    console.error("REGISTER error:", err?.response?.data || err.message || err);
+    return res.status(500).json({ error: "Server error" });
   }
 });
 

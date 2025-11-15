@@ -4,19 +4,16 @@ import { Routes, Route } from "react-router-dom";
 
 import AuthPage from "./components/AuthPage";
 import UserDashboard from "./components/UserDashboard";
-import AdminRoutes from "./components/AdminRoutes";
+import AdminLogin from "./components/AdminLogin";
+import AdminDashboard from "./components/AdminRoutes"; 
 
-function App() {
+export default function App() {
   return (
     <Routes>
       <Route path="/" element={<AuthPage />} />
       <Route path="/dashboard" element={<UserDashboard />} />
-      <Route path="/admin" element={<AdminRoutes />} />
-
-      {/* Fallback route */}
-      <Route path="*" element={<div style={{padding:20}}>Page Not Found</div>} />
+      <Route path="/admin-login" element={<AdminLogin />} />
+      <Route path="/admin" element={<AdminDashboard />} />
     </Routes>
   );
 }
-
-export default App;

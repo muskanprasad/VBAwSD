@@ -1,79 +1,163 @@
+// src/components/AdminRoutes.jsx
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
-const API = "http://localhost:5000/api/admin";
+const API = "http://localhost:5000";
 
 export default function AdminRoutes() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
-
-  const loadUsers = async () => {
+  const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem("va_token");
-
-      const res = await axios.get(`${API}/users`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      // FIX: Must use res.data.users
+      const res = await axios.get(`${API}/api/admin/users`);
       setUsers(res.data.users || []);
     } catch (err) {
-      console.error("Admin fetch failed:", err);
+      console.error(err);
       setUsers([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const deleteUser = async (id) => {
-    try {
-      const token = localStorage.getItem("va_token");
-
-      await axios.delete(`${API}/user/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      setUsers((prev) => prev.filter((u) => u._id !== id));
-    } catch (err) {
-      console.error("Delete failed:", err);
-    }
-  };
-
-  if (loading) return <p>Loading...</p>;
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   return (
-    <div style={{ padding: "30px" }}>
-      <h1>Admin Dashboard</h1>
+    <div style={styles.wrapper}>
+      {/* Sidebar */}
+      <aside style={styles.sidebar}>
+        <div style={styles.logo}>VoiceAuth Admin</div>
 
-      {users.length === 0 ? (
-        <p>No users registered.</p>
-      ) : (
-        <table border="1" style={{ width: "100%", marginTop: "20px" }}>
-          <thead>
-            <tr>
-              <th>Username</th>
-              <th>Recordings</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
+        <nav style={styles.nav}>
+          <div style={styles.navItemActive}>📊 Dashboard</div>
+          <div style={styles.navItem}>👥 Users</div>
+          <div style={styles.navItem}>🎤 Samples</div>
+          <div style={styles.navItem}>⚙ Settings</div>
+        </nav>
+      </aside>
 
-          <tbody>
-            {users.map((u) => (
-              <tr key={u._id}>
-                <td>{u.username}</td>
-                <td>{u.recordings ? u.recordings.length : 0}</td>
-                <td>
-                  <button onClick={() => deleteUser(u._id)}>Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {/* MAIN CONTENT */}
+      <main style={styles.main}>
+        <h1 style={styles.heading}>Admin Dashboard</h1>
+
+        {loading ? (
+          <div style={styles.loading}>Loading users…</div>
+        ) : (
+          <div style={styles.card}>
+            <h2 style={styles.subHeading}>Registered Users</h2>
+
+            {users.length === 0 ? (
+              <div>No users found.</div>
+            ) : (
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Recordings</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u._id}>
+                      <td>{u.username}</td>
+                      <td>{(u.recordings || []).length}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }
+
+// ----------------- STYLES -----------------
+
+const styles = {
+  wrapper: {
+    display: "flex",
+    background: "linear-gradient(to right, #e3f0ff, #eef7ff)",
+    height: "100vh",
+    fontFamily: "Inter, sans-serif",
+  },
+
+  sidebar: {
+    width: "240px",
+    background: "linear-gradient(180deg, #ffffffdd, #dfeaffdd)",
+    backdropFilter: "blur(10px)",
+    boxShadow: "4px 0 12px rgba(0,0,0,0.05)",
+    padding: "20px 15px",
+  },
+
+  logo: {
+    fontSize: "20px",
+    fontWeight: "700",
+    color: "#2B3A55",
+    marginBottom: "25px",
+  },
+
+  nav: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+
+  navItem: {
+    padding: "10px 14px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    color: "#333",
+    fontSize: "15px",
+  },
+
+  navItemActive: {
+    padding: "10px 14px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    background: "#6EA8FF",
+    color: "white",
+    fontWeight: "600",
+    fontSize: "15px",
+  },
+
+  main: {
+    flex: 1,
+    padding: "40px",
+  },
+
+  heading: {
+    fontSize: "28px",
+    fontWeight: "700",
+    color: "#2B3A55",
+  },
+
+  subHeading: {
+    marginTop: "0",
+    marginBottom: "20px",
+    fontSize: "20px",
+    color: "#394867",
+  },
+
+  card: {
+    background: "#ffffffcc",
+    padding: "25px",
+    borderRadius: "12px",
+    boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
+  },
+
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    marginTop: "10px",
+  },
+
+  loading: {
+    fontSize: "18px",
+    padding: "20px",
+  },
+};
