@@ -1,37 +1,45 @@
 // server/index.js
 import express from "express";
-import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
-import authRoutes from "./routes/auth.js";
+import mongoose from "mongoose";
 import registerRoute from "./routes/register.js";
 import verifyRoute from "./routes/verify.js";
 import adminRoute from "./routes/admin.js";
+import authRoute from "./routes/auth.js";
 
 dotenv.config();
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// MongoDB
+mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
+.then(() => console.log("✅ MongoDB connected"))
+.catch(err => console.error("Mongo failed", err));
+
+// Public endpoint — user count
+import User from "./models/User.js";
+app.get("/api/user-count", async (req, res) => {
+    const count = await User.countDocuments();
+    res.json({ count });
+});
+
+// Routes
+app.use("/api/register", registerRoute);   // POST
+app.use("/api/verify", verifyRoute);       // POST
+app.use("/api/admin", adminRoute);         // GET users, DELETE user
+app.use("/api/auth", authRoute);           // signup/login
+
+// Root
+app.get("/", (req, res) => res.send("VoiceAuth Node Server Running"));
+
 const PORT = process.env.PORT || 5000;
-
-app.get("/", (req, res) => res.json({ status: "backend up" }));
-
-app.use("/api/auth", authRoutes);
-app.use("/api/register", registerRoute);
-app.use("/api/verify", verifyRoute);
-app.use("/api/admin", adminRoute);
-
-(async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI, { });
-    console.log("✅ MongoDB connected");
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`🚀 Node backend running on port ${PORT}`);
-      console.log(`🧠 FastAPI feature URL (set in .env): ${process.env.AI_SERVICE_URL}`);
-    });
-  } catch (e) {
-    console.error("MongoDB connection error:", e.message);
-    process.exit(1);
-  }
-})();
+app.listen(PORT, () => {
+    console.log(`🚀 Node backend running on port ${PORT}`);
+    console.log("🧠 FastAPI feature URL:", process.env.AI_SERVICE_URL);
+});

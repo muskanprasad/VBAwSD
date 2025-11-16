@@ -7,9 +7,11 @@ const API = "http://localhost:5000";
 export default function AdminRoutes() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [count, setCount] = useState(null);
 
   const fetchUsers = async () => {
     try {
+      setLoading(true);
       const res = await axios.get(`${API}/api/admin/users`);
       setUsers(res.data.users || []);
     } catch (err) {
@@ -20,8 +22,18 @@ export default function AdminRoutes() {
     }
   };
 
+  const fetchCount = async () => {
+    try {
+      const res = await axios.get(`${API}/api/user-count`);
+      setCount(res.data.count ?? res.data.total ?? null);
+    } catch (e) {
+      console.error("Count err", e);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchCount();
   }, []);
 
   return (
@@ -41,6 +53,13 @@ export default function AdminRoutes() {
       {/* MAIN CONTENT */}
       <main style={styles.main}>
         <h1 style={styles.heading}>Admin Dashboard</h1>
+
+        <div style={{marginBottom:16, display:"flex", alignItems:"center", gap:12}}>
+          <div style={{fontSize:16, color:"#344"}}>Total registered users: <strong>{count ?? users.length}</strong></div>
+          <div>
+            <button className="btn" onClick={() => { fetchUsers(); fetchCount(); }}>Refresh</button>
+          </div>
+        </div>
 
         {loading ? (
           <div style={styles.loading}>Loading users…</div>
@@ -76,9 +95,8 @@ export default function AdminRoutes() {
   );
 }
 
-// ----------------- STYLES -----------------
-
-const styles = {
+// ... same styles object as before (omitted for brevity)
+const styles = { /* keep earlier styles or copy from previous code block */ 
   wrapper: {
     display: "flex",
     background: "linear-gradient(to right, #e3f0ff, #eef7ff)",

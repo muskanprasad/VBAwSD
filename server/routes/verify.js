@@ -1,86 +1,106 @@
 // server/routes/verify.js
 import express from "express";
-import multer from "multer";
+import fs from "fs";
+import path from "path";
 import axios from "axios";
 import FormData from "form-data";
-import dotenv from "dotenv";
-import User from "../models/User.js";
+import ffmpeg from "fluent-ffmpeg";
+import { v4 as uuidv4 } from "uuid";
+import multer from "multer";
+import User from "../models/User.js"; // adjust path if different
+import similarity from "../utils/similarity.js"; // your similarity function
 
-dotenv.config();
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
-const AI_URL = process.env.AI_SERVICE_URL;
-const TARGET_LEN = 28;
-const THRESHOLD = 0.75; // tune as needed
+const upload = multer({ storage: multer.memoryStorage() }); // keep in memory then convert
 
-function dot(a, b) {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
-  return s;
-}
-function norm(a) {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += a[i] * a[i];
-  return Math.sqrt(s);
-}
-function cosine(a, b) {
-  if (!a || !b || a.length !== b.length) return 0;
-  const d = dot(a, b);
-  const na = norm(a);
-  const nb = norm(b);
-  if (na === 0 || nb === 0) return 0;
-  return d / (na * nb);
+// helper: convert buffer (any format) -> WAV file path using ffmpeg
+function bufferToWavFile(buffer) {
+  return new Promise((resolve, reject) => {
+    const tmpName = `${uuidv4()}.wav`;
+    const tmpPath = path.join(process.cwd(), "uploads", tmpName);
+
+    // ensure uploads dir exists
+    fs.mkdirSync(path.join(process.cwd(), "uploads"), { recursive: true });
+
+    // Write input temp file (we'll stream input from buffer)
+    const inputPath = path.join(process.cwd(), "uploads", `${uuidv4()}.input`);
+    fs.writeFileSync(inputPath, buffer);
+
+    ffmpeg(inputPath)
+      .toFormat("wav")
+      .audioChannels(1)
+      .audioFrequency(16000)
+      .on("error", (err) => {
+        try { fs.unlinkSync(inputPath); } catch(e){}
+        reject(err);
+      })
+      .on("end", () => {
+        try { fs.unlinkSync(inputPath); } catch(e){}
+        resolve(tmpPath);
+      })
+      .save(tmpPath);
+  });
 }
 
 router.post("/", upload.single("voice"), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "Missing file" });
+    if (!req.file) return res.status(400).json({ error: "Missing 'voice' file" });
 
+    // convert incoming buffer to WAV on server (so FastAPI/librosa will accept)
+    const wavPath = await bufferToWavFile(req.file.buffer);
+
+    // send to AI microservice (FastAPI) as 'file'
     const form = new FormData();
-    form.append("file", req.file.buffer, { filename: req.file.originalname || "voice.wav" });
+    form.append("file", fs.createReadStream(wavPath), "voice.wav");
 
-    const aiRes = await axios.post(AI_URL, form, { headers: form.getHeaders(), timeout: 30000 });
-    if (aiRes.status !== 200 || !aiRes.data?.features) {
-      console.error("AI service error:", aiRes.data);
-      return res.status(500).json({ error: "AI service error", detail: aiRes.data });
+    const AI_URL = process.env.AI_SERVICE_URL || "http://127.0.0.1:8000/analyze-voice";
+
+    const aiResp = await axios.post(AI_URL, form, {
+      headers: form.getHeaders(),
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+    });
+
+    // aiResp.data should include features array
+    const features = aiResp.data.features || aiResp.data; // adapt if different shape
+    if (!features || !Array.isArray(features)) {
+      fs.unlinkSync(wavPath);
+      return res.status(500).json({ error: "AI didn't return features" });
     }
 
-    let features = aiRes.data.features;
-    if (!Array.isArray(features)) return res.status(500).json({ error: "Invalid features" });
-
-    // normalize/pad/truncate to TARGET_LEN
-    if (features.length < TARGET_LEN) {
-      features = features.concat(Array(TARGET_LEN - features.length).fill(0));
-    } else if (features.length > TARGET_LEN) {
-      features = features.slice(0, TARGET_LEN);
-    }
-
+    // Fetch all stored users and compare
     const users = await User.find({}).lean();
-    let bestScore = -1;
-    let bestUser = null;
+    if (!users || users.length === 0) {
+      fs.unlinkSync(wavPath);
+      return res.json({ verified: false, matchedUser: null, confidence: 0 });
+    }
 
+    // compute similarity to each stored user (assuming user.recordings[0].features)
+    let best = { name: null, score: 0 };
     for (const u of users) {
-      if (!Array.isArray(u.recordings) || u.recordings.length === 0) continue;
-      for (const rec of u.recordings) {
-        if (!rec.features) continue;
-        let stored = rec.features;
-        // pad/truncate stored too (just in case)
-        if (stored.length < TARGET_LEN) stored = stored.concat(Array(TARGET_LEN - stored.length).fill(0));
-        if (stored.length > TARGET_LEN) stored = stored.slice(0, TARGET_LEN);
-
-        const score = cosine(features, stored);
-        if (score > bestScore) {
-          bestScore = score;
-          bestUser = u.username;
-        }
+      // ensure user has stored 'avg_features' or first recording features
+      const storedFeatures = u.avg_features || (u.recordings && u.recordings[0] && u.recordings[0].features);
+      if (!storedFeatures) continue;
+      const score = similarity(features, storedFeatures); // returns 0..1 (higher better)
+      if (Number.isFinite(score) && score > best.score) {
+        best = { name: u.username || u.name || u._id, score };
       }
     }
 
-    const verified = bestScore >= THRESHOLD;
-    return res.json({ verified, matchedUser: bestUser, confidence: bestScore || 0 });
+    // cleanup
+    fs.unlinkSync(wavPath);
+
+    const threshold = parseFloat(process.env.VERIFY_THRESHOLD || "0.65"); // tuneable
+    const verified = best.name && best.score >= threshold;
+
+    return res.json({
+      verified,
+      matchedUser: best.name,
+      confidence: best.score || 0,
+    });
   } catch (err) {
-    console.error("VERIFY error:", err?.response?.data || err.message || err);
-    return res.status(500).json({ error: "Server error" });
+    console.error("Verify route error:", err?.message || err);
+    return res.status(500).json({ error: "Verify failed", detail: err?.message || err });
   }
 });
 

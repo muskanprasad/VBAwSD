@@ -22,12 +22,36 @@ export default function AdminLogin(){
   };
 
   return (
-    <div style={{padding:40}}>
-      <h2>Admin Login</h2>
-      <input placeholder="admin" value={u} onChange={e=>setU(e.target.value)} style={{display:"block", padding:8, marginBottom:8}} />
-      <input placeholder="password" type="password" value={p} onChange={e=>setP(e.target.value)} style={{display:"block", padding:8, marginBottom:8}} />
-      <button onClick={login}>Login</button>
-      <div style={{color:"tomato"}}>{msg}</div>
+    // FIX: Added flex centering styles to the wrapper div
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      justifyContent: 'center', // Added for vertical centering
+      paddingTop: 40,
+      width: '100vw',
+      minHeight: '100vh',
+    }}>
+      <div style={{ width: 300 }}> 
+        <h2>Admin Login</h2>
+        <input 
+          placeholder="admin" 
+          value={u} 
+          onChange={e=>setU(e.target.value)} 
+          // FIX: Added width: "100%"
+          style={{display:"block", padding:8, marginBottom:8, width: "100%"}} 
+        />
+        <input 
+          placeholder="password" 
+          type="password" 
+          value={p} 
+          onChange={e=>setP(e.target.value)} 
+          // FIX: Added width: "100%"
+          style={{display:"block", padding:8, marginBottom:8, width: "100%"}} 
+        />
+        <button onClick={login}>Login</button>
+        <div style={{color:"tomato"}}>{msg}</div>
+      </div>
     </div>
   );
 }
