@@ -1,0 +1,76 @@
+.dashboard-page {
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #171721, #0b0d1a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-family: "Inter", sans-serif;
+}
+
+.dashboard-card {
+  width: 460px;
+  padding: 40px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+  text-align: center;
+}
+
+.dashboard-card h1 {
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+
+.email {
+  font-size: 14px;
+  opacity: 0.7;
+  margin-bottom: 28px;
+}
+
+.result-card {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 14px;
+  padding: 24px;
+}
+
+.result-card h2 {
+  font-size: 16px;
+  margin-bottom: 18px;
+  opacity: 0.9;
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.metric strong {
+  color: #ff7131;
+}
+
+.decision {
+  margin-top: 18px;
+  padding: 10px;
+  border-radius: 10px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.decision.accept {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+}
+
+.decision.reject {
+  background: rgba(255, 60, 104, 0.2);
+  color: #ff3c68;
+}
+
+.security-badge {
+  margin-top: 22px;
+  font-size: 13px;
+  opacity: 0.85;
+}

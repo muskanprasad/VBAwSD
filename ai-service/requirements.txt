@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+numpy
+scipy
+librosa
+soundfile
+torch
+speechbrain
+joblib
+scikit-learn
+pydub

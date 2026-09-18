@@ -1,0 +1,14 @@
+/* Optional App-specific styles */
+.app-container {
+  padding: 1rem;
+}
+
+.centered {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.full-width {
+  width: 100%;
+}

@@ -1,0 +1,58 @@
+.admin-page {
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #171721, #0b0d1a);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #fff;
+  font-family: "Inter", sans-serif;
+}
+
+.admin-card {
+  width: 520px;
+  padding: 42px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.7);
+}
+
+.admin-card h1 {
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+
+.subtitle {
+  font-size: 14px;
+  opacity: 0.7;
+  margin-bottom: 26px;
+}
+
+.section {
+  margin-bottom: 26px;
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.section h2 {
+  font-size: 15px;
+  margin-bottom: 14px;
+  opacity: 0.9;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.row strong {
+  color: #ff7131;
+}
+
+.note {
+  font-size: 13px;
+  line-height: 1.6;
+  opacity: 0.85;
+}
